@@ -1,5 +1,5 @@
 input/DESCENT.*
 output/*
 !output/README.md
-converted/background/*.png
+converted/backgrounds/*.png
 .idea

@@ -17,7 +17,7 @@ output_maps = False
 
 hog_files = []
 
-f = os.open("./input/DESCENT.HOG", os.O_RDONLY)
+f = os.open("./input/DESCENT.HOG", os.O_RDONLY | getattr(os, 'O_BINARY', 0))
 info = os.fstat(f)
 sig = os.read(f, 3).decode("latin1")
 
@@ -33,8 +33,8 @@ while file_offset < info.st_size:
     file_name = os.read(f, 13).decode('latin1')
     file_offset += 13
 
-    # strip everything but a-z, dot and digits
-    file_name = re.sub('[^a-z\.\d]', '', file_name)
+    # cut off everything after the null byte
+    file_name = file_name.split('\x00', 1)[0]
 
     # get extension without dot
     file_type = os.path.splitext(file_name)[1][-3:]
