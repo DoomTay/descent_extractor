@@ -2,4 +2,6 @@ input/DESCENT.*
 output/*
 !output/README.md
 converted/backgrounds/*.png
+converted/palettes/*.png
+converted/textures/*.png
 .idea
