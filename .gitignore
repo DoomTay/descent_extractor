@@ -8,4 +8,5 @@ converted/palettes/*.png
 converted/surfaces/*.png
 converted/texts/*.txt
 converted/textures/*.png
+converted/sounds/*.wav
 .idea

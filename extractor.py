@@ -3,16 +3,17 @@ import re
 import sys
 import io
 import json
+import wave
 from PIL import Image
 
-output_raw = False
-output_textures = True
-output_palettes = True
-output_backgrounds = True
+output_raw = True
+output_textures = False
+output_palettes = False
+output_backgrounds = False
 output_models = False
-output_sounds = False
-output_briefings = True
-output_surfaces = True
+output_sounds = True
+output_briefings = False
+output_surfaces = False
 output_font = True
 output_maps = False
 
@@ -189,7 +190,7 @@ if output_sounds or output_textures:
         sound_name = os.read(f, 8).decode("latin1")
         sound_name = sound_name.split('\x00', 1)[0]
         file_offset += 8
-        sound_nSamples = int.from_bytes(os.read(f, 4), byteorder=sys.byteorder)
+        sound_length = int.from_bytes(os.read(f, 4), byteorder=sys.byteorder)
         file_offset += 4
         sound_data_length = int.from_bytes(os.read(f, 4), byteorder=sys.byteorder)
         file_offset += 4
@@ -198,7 +199,7 @@ if output_sounds or output_textures:
         
         sound = {
             "name": sound_name,
-            "nSamples": sound_nSamples,
+            "length": sound_length,
             "data_length": sound_data_length,
             "offset": sound_offset
         }
@@ -581,4 +582,45 @@ if output_font:
             image = Image.frombytes("RGBA", (texW, fnt['ft_h']), bytes(png_data))
             image.save('./converted/fonts/' + row['file_name'] + '.png', format="png")
             
+if output_sounds:
+    sounds_blob = io.BytesIO(sound_data_stream)
+    
+    for sound in sounds:
+        
+        true_offset = sound["offset"] - sounds[0]["offset"]
+        
+        sounds_blob.seek(true_offset)
+        
+        # SOSCODEC header stuff. Probably wasn't parsed right
+        # header_stuff = sounds_blob.read(8)
+        
+        sound_data = sounds_blob.read(sound["data_length"])
+                
+        if output_raw:
+            of = open('./output/' + sound["name"] + '.snd', 'wb')
+            of.write(sound_data)
+            of.close()
+                        
+        # Not sure we'll need this yet
+        converted_data = bytearray()
+        scan_pos = 0
+        
+        print(sound)
+        
+        with wave.open('./converted/sounds/' + sound["name"] + '.wav', 'wb') as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(1)
+            wav.setframerate(11025)
+            
+            # wav.writeframesraw(sound_data)
+            
+            for byte in sound_data:                
+                s = (byte & 0xF) * 16
+                if s < 128: s = 127 - s
+                wav.writeframes(bytes([s]))
+
+                s = ((byte >> 4) & 0xF) * 16
+                if s < 128: s = 127 - s
+                wav.writeframes(bytes([s]))
+                
 print("Done")
