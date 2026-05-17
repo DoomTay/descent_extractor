@@ -10,7 +10,7 @@ output_palettes = True
 output_backgrounds = True
 output_models = False
 output_sounds = True
-output_briefings = False
+output_briefings = True
 output_surfaces = False
 output_font = True
 output_maps = False
@@ -313,4 +313,22 @@ if output_textures:
             
         image = Image.frombytes("RGBA", (texture['xsize'], texture['ysize']), bytes(converted_data))
         image.save('./converted/textures/' + texture['texture_name'] + "_" + str(texture['frame']) + '.png', format="png")
+        
+if output_briefings:
+    for row in filter(lambda hfile: hfile['type'] == "txb", hog_files):
+        print(f'converting {row["file_name"]}')
+        
+        output = ''
+        for b in row["data"]:
+            
+            c = b  # get byte value
+            
+            if (c != 0x0a):
+                c = (((c & 0x3f) << 2) + ((c & 0xc0) >> 6)) ^ 0xa7;
+            output += chr(c)
+        
+        of = open('./converted/texts/' + row['file_name'][:-4] + '.txt', 'w', encoding='utf-8')
+        of.write(output)
+        of.close()
+
 print("Done")

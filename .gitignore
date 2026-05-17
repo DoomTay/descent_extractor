@@ -3,5 +3,6 @@ output/*
 !output/README.md
 converted/backgrounds/*.png
 converted/palettes/*.png
+converted/texts/*.txt
 converted/textures/*.png
 .idea
