@@ -2,15 +2,16 @@ import os
 import re
 import sys
 import io
+import json
 from PIL import Image
 
-output_raw = True
-output_textures = True
-output_palettes = True
-output_backgrounds = True
+output_raw = False
+output_textures = False
+output_palettes = False
+output_backgrounds = False
 output_models = False
-output_sounds = True
-output_briefings = True
+output_sounds = False
+output_briefings = False
 output_surfaces = False
 output_font = True
 output_maps = False
@@ -98,8 +99,6 @@ if output_palettes or output_textures:
             byte_r = int.from_bytes(palette_data.read(1)) * 4
             byte_g = int.from_bytes(palette_data.read(1)) * 4
             byte_b = int.from_bytes(palette_data.read(1)) * 4
-            
-            print(f"Palette entry values: {byte_r}, {byte_g}, {byte_b}")
             
             temp_palette.extend([byte_r, byte_g, byte_b, 255])
         
@@ -331,4 +330,155 @@ if output_briefings:
         of.write(output)
         of.close()
 
+FT_COLOR = 1
+FT_PROPORTIONAL = 2
+FT_KERNED = 4
+    
+if output_font:
+    for row in filter(lambda hfile: hfile['type'] == "fnt", hog_files):
+        print(f'converting {row["file_name"]}')
+
+        offset = 0
+
+        sig = row["data"][offset:offset + 4].decode('latin1')
+        offset += 4
+        if sig != "PSFN":
+            raise ValueError('Expected "PSFN" signature')
+
+        data_size = int.from_bytes(row["data"][offset:offset + 4], byteorder="little")
+        offset += 4
+
+        fnt = {}
+        fnt['ft_w'] = int.from_bytes(row["data"][offset:offset + 2], byteorder="little")
+        offset += 2
+        fnt['ft_h'] = int.from_bytes(row["data"][offset:offset + 2], byteorder="little")
+        offset += 2
+        fnt['ft_flags'] = int.from_bytes(row["data"][offset:offset + 2], byteorder="little")
+        offset += 2
+        fnt['ft_baseline'] = int.from_bytes(row["data"][offset:offset + 2], byteorder="little")
+        offset += 2
+        fnt['ft_minchar'] = row["data"][offset]
+        offset += 1
+        fnt['ft_maxchar'] = row["data"][offset]
+        offset += 1
+        fnt['ft_bytewidth'] = int.from_bytes(row["data"][offset:offset + 2], byteorder="little")
+        offset += 2
+        fnt['ft_data'] = int.from_bytes(row["data"][offset:offset + 4], byteorder="little") + 8
+        data = row['data'][fnt['ft_data']:]
+        offset += 4
+        fnt['ft_chars'] = int.from_bytes(row["data"][offset:offset + 4], byteorder="little")
+        offset += 4
+        fnt['ft_widths'] = int.from_bytes(row["data"][offset:offset + 4], byteorder="little") + 8
+        widths_data = row['data'][fnt['ft_widths']:]
+        offset += 4
+        fnt['ft_kerndata'] = int.from_bytes(row["data"][offset:offset + 4], byteorder="little") + 8
+        kern_data = row['data'][fnt['ft_kerndata']:]
+        offset += 4
+        
+        fnt['widths'] = []
+        if fnt['ft_flags'] & FT_PROPORTIONAL:
+            for i in range(fnt['ft_maxchar'] - fnt['ft_minchar'] + 1):
+                fnt['widths'].append(int.from_bytes(widths_data[i * 2:(i * 2) + 2], byteorder="little"))
+        
+        fnt['kerns'] = []
+        if fnt['ft_flags'] & FT_KERNED:
+            kernOffset = 0
+            nextByte = kern_data[kernOffset]
+            kernOffset += 1
+            while nextByte != 0xFF:
+                secondChar = kern_data[kernOffset]
+                kernOffset += 1
+                newWidth = kern_data[kernOffset]
+                kernOffset += 1
+                fnt['kerns'].append({
+                    'firstChar': nextByte,
+                    'secondChar': secondChar,
+                    'newWidth': newWidth
+                })
+                nextByte = kern_data[kernOffset]
+                kernOffset += 1
+
+        # Font definition file
+        of = open('./converted/fonts/' + row['file_name'][:-4] + '.json', 'w', encoding='utf-8')
+        of.write(json.dumps(fnt))
+        of.close()
+
+        # Font palette
+        palette = []
+        if fnt['ft_flags'] & FT_COLOR:
+            palOffset = len(row['data']) - 256 * 3
+            
+            for i in range(256):
+                byte_r = row['data'][palOffset + i * 3 + 0] * 4
+                byte_g = row['data'][palOffset + i * 3 + 1] * 4
+                byte_b = row['data'][palOffset + i * 3 + 2] * 4
+                
+                palette.extend([byte_r, byte_g, byte_b, 255])
+                
+            palette[255*4 + 3] = 0
+            
+            image = Image.frombytes("RGBA", (16, 16), bytes(palette))
+            image.save('./converted/fonts/' + row['file_name'] + '.256.png', format="png")
+
+        # Font texture
+        if palette:
+            texW = sum(fnt["widths"])
+            png_data = bytearray(texW * fnt['ft_h'] * 4)
+            dataOffset = 0
+            xOffset = 0
+
+            for c in range(fnt['ft_minchar'],fnt['ft_maxchar'] + 1):
+                cid = c - fnt['ft_minchar']
+                w = fnt['widths'][cid]
+                for y in range(fnt['ft_h']):
+                    for x in range(w):
+                        col = data[dataOffset]
+                        dataOffset += 1
+                        k = y * texW + xOffset + x
+                        
+                        png_data[k * 4 + 0] = palette[col * 4 + 0]
+                        png_data[k * 4 + 1] = palette[col * 4 + 1]
+                        png_data[k * 4 + 2] = palette[col * 4 + 2]
+                        png_data[k * 4 + 3] = palette[col * 4 + 3]
+                        
+                xOffset += w
+                            
+            image = Image.frombytes("RGBA", (texW, fnt['ft_h']), bytes(png_data))
+            image.save('./converted/fonts/' + row['file_name'] + '.png', format="png")
+            
+        else:
+            texW = sum(fnt["widths"])
+            png_data = bytearray(texW * fnt['ft_h'] * 4)
+            dataOffset = 0
+            xOffset = 0
+            byte = 0
+            bit = 0
+
+            for c in range(fnt['ft_minchar'],fnt['ft_maxchar']):
+                cid = c - fnt['ft_minchar']
+                w = fnt['widths'][cid]
+                for y in range(fnt['ft_h']):
+                    for x in range(w):
+                        if (bit == 0):
+                            byte = data[dataOffset]
+                            dataOffset += 1
+                        col = byte & (0x80 >> bit)
+                        bit = (bit + 1) % 8
+                        k = y * texW + xOffset + x
+                        if col:
+                            png_data[k * 4 + 0] = 255
+                            png_data[k * 4 + 1] = 255
+                            png_data[k * 4 + 2] = 255
+                            png_data[k * 4 + 3] = 255
+                        else:
+                            png_data[k * 4 + 0] = 0
+                            png_data[k * 4 + 1] = 0
+                            png_data[k * 4 + 2] = 0
+                            png_data[k * 4 + 3] = 0
+                    bit = 0
+                xOffset += w
+            
+            image = Image.frombytes("RGBA", (texW, fnt['ft_h']), bytes(png_data))
+            image.save('./converted/fonts/' + row['file_name'] + '.png', format="png")
+            
 print("Done")
