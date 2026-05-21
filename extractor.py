@@ -6,13 +6,13 @@ import json
 from PIL import Image
 
 output_raw = False
-output_textures = False
-output_palettes = False
-output_backgrounds = False
+output_textures = True
+output_palettes = True
+output_backgrounds = True
 output_models = False
 output_sounds = False
-output_briefings = False
-output_surfaces = False
+output_briefings = True
+output_surfaces = True
 output_font = True
 output_maps = False
 
@@ -329,6 +329,106 @@ if output_briefings:
         of = open('./converted/texts/' + row['file_name'][:-4] + '.txt', 'w', encoding='utf-8')
         of.write(output)
         of.close()
+
+if output_surfaces:
+    for row in filter(lambda hfile: hfile['type'] == "bbm", hog_files):
+        print(f"converting {row['file_name']}")
+
+        main_offset = 0
+        chunkID = row["data"][main_offset:main_offset + 4].decode('latin1')
+        main_offset += 4
+        if chunkID != "FORM":
+            print("Expected FORM chunkID")
+        lenChunk = int.from_bytes(row["data"][main_offset:main_offset + 4], byteorder="big")
+        main_offset += 4
+        formatID = row["data"][main_offset:main_offset + 4].decode('latin1')
+        main_offset += 4
+        if formatID != "PBM ":
+            print("Expected PBM formatID")
+        content = row["data"][main_offset:main_offset + lenChunk - 4]
+        main_offset += lenChunk - 4
+        if lenChunk % 2:
+            main_offset += 1
+
+        offset = 0
+        bmhd = {}
+        pal = None
+        x = 0
+        y = 0
+        while offset < len(content):
+            chunkID = content[offset:offset + 4].decode('latin1')
+            offset += 4
+            lenChunk = int.from_bytes(row["data"][offset:offset + 4], byteorder="big")
+            offset += 4
+
+            match chunkID:
+                case "BMHD":
+                    bmhd["width"] = int.from_bytes(content[offset:offset + 2], byteorder="big")
+                    offset += 2
+                    bmhd["height"] = int.from_bytes(content[offset:offset + 2], byteorder="big")
+                    offset += 2
+                    bmhd["xOrigin"] = int.from_bytes(content[offset:offset + 2], byteorder="big")
+                    offset += 2
+                    bmhd["yOrigin"] = int.from_bytes(content[offset:offset + 2], byteorder="big")
+                    offset += 2
+                    bmhd["numPlanes"] = content[offset]
+                    offset += 1
+                    bmhd["mask"] = content[offset]
+                    offset += 1
+                    bmhd["compression"] = content[offset]
+                    offset += 1
+                    bmhd["pad1"] = content[offset]
+                    offset += 1
+                    bmhd["transClr"] = int.from_bytes(content[offset:offset + 2], byteorder="big")
+                    offset += 2
+                    bmhd["xAspect"] = content[offset]
+                    offset += 1
+                    bmhd["yAspect"] = content[offset]
+                    offset += 1
+                    bmhd["pageWidth"] = int.from_bytes(content[offset:offset + 2], byteorder="big")
+                    offset += 2
+                    bmhd["pageHeight"] = int.from_bytes(content[offset:offset + 2], byteorder="big")
+                    offset += 2
+        
+                    # Validate only what we support
+                    if (bmhd["numPlanes"] != 8 or bmhd["mask"] != 2 or bmhd["compression"] != 0):
+                        print("Unsupported BMHD format")
+                        break
+                case "CMAP":
+                    pal = content[offset:offset + 256 * 3]
+                    offset += 256 * 3
+                case "GRAB":
+                    offset += 4
+                case "CRNG":
+                    offset += 8
+                case "TINY":
+                    width = int.from_bytes(content[offset:offset + 2], byteorder="big")
+                    offset += 2
+                    height = int.from_bytes(content[offset:offset + 2], byteorder="big")
+                    offset += 2
+                    offset += width * height
+                case "BODY":
+                    png_data = bytearray(bmhd["width"] * bmhd["height"] * 4)
+                    
+                    for i in range(bmhd["width"] * bmhd["height"]):
+                        idx = content[offset]
+                        offset += 1
+                        
+                        png_data[i * 4 + 0] = pal[idx * 3 + 0]
+                        png_data[i * 4 + 1] = pal[idx * 3 + 1]
+                        png_data[i * 4 + 2] = pal[idx * 3 + 2]
+                        png_data[i * 4 + 3] = 0 if idx == bmhd["transClr"] else 255
+                    
+                    image = Image.frombytes("RGBA", (bmhd["width"], bmhd["height"]), bytes(png_data))
+                    image.save('./converted/surfaces/' + row['file_name'][:-4] + '.png', format="png")
+                    
+                    break
+                case _:
+                    print(f"Unhandled sub chunk: {chunkID}")
+                    break
+
+        chunkID = row["data"][main_offset:main_offset + 4].decode('latin1')
+        main_offset += 4
 
 FT_COLOR = 1
 FT_PROPORTIONAL = 2

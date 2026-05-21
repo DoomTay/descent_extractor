@@ -5,6 +5,7 @@ converted/backgrounds/*.png
 converted/fonts/*.json
 converted/fonts/*.png
 converted/palettes/*.png
+converted/surfaces/*.png
 converted/texts/*.txt
 converted/textures/*.png
 .idea
