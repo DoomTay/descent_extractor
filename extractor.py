@@ -592,9 +592,6 @@ if output_sounds:
         
         sounds_blob.seek(true_offset)
         
-        # SOSCODEC header stuff. Probably wasn't parsed right
-        # header_stuff = sounds_blob.read(8)
-        
         sound_data = sounds_blob.read(sound["data_length"])
                 
         if output_raw:
