@@ -4,6 +4,7 @@ import sys
 import io
 import json
 import wave
+from soscodec import sos_codec_decompress_data
 from PIL import Image
 
 output_raw = True
@@ -600,27 +601,16 @@ if output_sounds:
             of = open('./output/' + sound["name"] + '.snd', 'wb')
             of.write(sound_data)
             of.close()
-                        
-        # Not sure we'll need this yet
-        converted_data = bytearray()
-        scan_pos = 0
         
-        print(sound)
+        print(f"converting {sound["name"]}")
         
+        converted_data = sos_codec_decompress_data(sound_data)
+                
         with wave.open('./converted/sounds/' + sound["name"] + '.wav', 'wb') as wav:
             wav.setnchannels(1)
             wav.setsampwidth(1)
             wav.setframerate(11025)
             
-            # wav.writeframesraw(sound_data)
-            
-            for byte in sound_data:                
-                s = (byte & 0xF) * 16
-                if s < 128: s = 127 - s
-                wav.writeframes(bytes([s]))
-
-                s = ((byte >> 4) & 0xF) * 16
-                if s < 128: s = 127 - s
-                wav.writeframes(bytes([s]))
+            wav.writeframesraw(converted_data)
                 
 print("Done")
