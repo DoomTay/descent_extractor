@@ -8,13 +8,13 @@ from soscodec import sos_codec_decompress_data
 from PIL import Image
 
 output_raw = True
-output_textures = False
-output_palettes = False
-output_backgrounds = False
+output_textures = True
+output_palettes = True
+output_backgrounds = True
 output_models = False
 output_sounds = True
-output_briefings = False
-output_surfaces = False
+output_briefings = True
+output_surfaces = True
 output_font = True
 output_maps = False
 
