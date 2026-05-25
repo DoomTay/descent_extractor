@@ -360,7 +360,7 @@ if output_surfaces:
         while offset < len(content):
             chunkID = content[offset:offset + 4].decode('latin1')
             offset += 4
-            lenChunk = int.from_bytes(row["data"][offset:offset + 4], byteorder="big")
+            lenChunk = int.from_bytes(content[offset:offset + 4], byteorder="big")
             offset += 4
 
             match chunkID:
@@ -391,11 +391,6 @@ if output_surfaces:
                     offset += 2
                     bmhd["pageHeight"] = int.from_bytes(content[offset:offset + 2], byteorder="big")
                     offset += 2
-        
-                    # Validate only what we support
-                    if (bmhd["numPlanes"] != 8 or bmhd["mask"] != 2 or bmhd["compression"] != 0):
-                        print("Unsupported BMHD format")
-                        break
                 case "CMAP":
                     pal = content[offset:offset + 256 * 3]
                     offset += 256 * 3
@@ -404,30 +399,65 @@ if output_surfaces:
                 case "CRNG":
                     offset += 8
                 case "TINY":
-                    width = int.from_bytes(content[offset:offset + 2], byteorder="big")
-                    offset += 2
-                    height = int.from_bytes(content[offset:offset + 2], byteorder="big")
-                    offset += 2
-                    offset += width * height
+                    offset += lenChunk
                 case "BODY":
                     png_data = bytearray(bmhd["width"] * bmhd["height"] * 4)
                     
-                    for i in range(bmhd["width"] * bmhd["height"]):
-                        idx = content[offset]
-                        offset += 1
+                    if bmhd["compression"] == 0:
+                        for i in range(bmhd["width"] * bmhd["height"]):
+                            idx = content[offset]
+                            offset += 1
+                            
+                            png_data[i * 4 + 0] = pal[idx * 3 + 0]
+                            png_data[i * 4 + 1] = pal[idx * 3 + 1]
+                            png_data[i * 4 + 2] = pal[idx * 3 + 2]
+                            png_data[i * 4 + 3] = 0 if idx == bmhd["transClr"] else 255
+                    elif bmhd["compression"] == 1:
+                        final_decompressed_length = bmhd["width"] * bmhd["height"]
                         
-                        png_data[i * 4 + 0] = pal[idx * 3 + 0]
-                        png_data[i * 4 + 1] = pal[idx * 3 + 1]
-                        png_data[i * 4 + 2] = pal[idx * 3 + 2]
-                        png_data[i * 4 + 3] = 0 if idx == bmhd["transClr"] else 255
+                        final_offset = offset + lenChunk
+                        
+                        decompressed_offset = 0
+                        
+                        while decompressed_offset < final_decompressed_length:
+                            control_byte = content[offset]
+                            offset += 1
+                            if control_byte > 128:
+                                byte_to_repeat = content[offset]
+                                offset += 1
+                                repeatCount = 257 - control_byte
+                                
+                                for r in range(repeatCount):
+                                    png_data[decompressed_offset * 4 + 0] = pal[byte_to_repeat * 3 + 0]
+                                    png_data[decompressed_offset * 4 + 1] = pal[byte_to_repeat * 3 + 1]
+                                    png_data[decompressed_offset * 4 + 2] = pal[byte_to_repeat * 3 + 2]
+                                    png_data[decompressed_offset * 4 + 3] = 0 if idx == bmhd["transClr"] else 255
+                                    decompressed_offset += 1
+                            elif control_byte < 128:
+                                output_range = control_byte + 1
+                                
+                                literal_bytes = content[offset:offset + output_range]
+                                offset += output_range
+                                
+                                for l in literal_bytes:
+                                    png_data[decompressed_offset * 4 + 0] = pal[l * 3 + 0]
+                                    png_data[decompressed_offset * 4 + 1] = pal[l * 3 + 1]
+                                    png_data[decompressed_offset * 4 + 2] = pal[l * 3 + 2]
+                                    png_data[decompressed_offset * 4 + 3] = 0 if idx == bmhd["transClr"] else 255
+                                    decompressed_offset += 1
+                            else: break
+                    else:
+                        print(f"Unknown compression type: {bmhd['compression']}")
+                        break
                     
                     image = Image.frombytes("RGBA", (bmhd["width"], bmhd["height"]), bytes(png_data))
                     image.save('./converted/surfaces/' + row['file_name'][:-4] + '.png', format="png")
-                    
-                    break
                 case _:
-                    print(f"Unhandled sub chunk: {chunkID}")
+                    print(f"Unhandled sub chunk: {chunkID} at offset {offset + 4}")
                     break
+                    
+            if lenChunk & 1:
+                offset += 1
 
         chunkID = row["data"][main_offset:main_offset + 4].decode('latin1')
         main_offset += 4
