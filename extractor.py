@@ -207,10 +207,14 @@ if output_sounds or output_textures:
         
         print(f"sound {sound}")
         sounds.append(sound)
-            
-    texture_data_stream = os.read(f,sounds[0]['offset'])
-    file_offset += len(texture_data_stream)
-    sound_data_stream = os.read(f,(info.st_size - file_offset))
+    
+    if(num_sounds > 0):
+        texture_data_stream = os.read(f,sounds[0]['offset'])
+        file_offset += len(texture_data_stream)
+        sound_data_stream = os.read(f,(info.st_size - file_offset))
+    else:
+        texture_data_stream = os.read(f,(info.st_size - file_offset))
+        file_offset += len(texture_data_stream)
 
 def get_palette_color(idx):
     return (palette[idx * 4 + 0], palette[idx * 4 + 1], palette[idx * 4 + 2], palette[idx * 4 + 3])
