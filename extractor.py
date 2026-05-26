@@ -161,7 +161,7 @@ if output_sounds or output_textures:
         texture_abmFlag = bool(frame & BM_FLAG_ABM)
         texture_largeFlag = bool(frame & BM_FLAG_LARGE)
         texture_xsize = int.from_bytes(os.read(f, 1))
-        if(texture_largeFlag):
+        if texture_largeFlag:
             texture_xsize += 256
         file_offset += 1
         texture_ysize = int.from_bytes(os.read(f, 1))
@@ -208,7 +208,7 @@ if output_sounds or output_textures:
         print(f"sound {sound}")
         sounds.append(sound)
     
-    if(num_sounds > 0):
+    if num_sounds > 0:
         texture_data_stream = os.read(f,sounds[0]['offset'])
         file_offset += len(texture_data_stream)
         sound_data_stream = os.read(f,(info.st_size - file_offset))
@@ -239,6 +239,7 @@ if output_textures:
         texture_blob.seek(offset_in_stream)
         
         is_compressed = bool(texture['flag'] & (BM_FLAG_RLE | BM_FLAG_RLE_BIG))
+        use_big_rle = bool(texture['flag'] & BM_FLAG_RLE_BIG)
         
         if not is_compressed:
             for i in range(texture['xsize'] * texture['ysize']):
@@ -252,23 +253,30 @@ if output_textures:
                 converted_data.extend([idx_r,idx_g,idx_b,idx_a])
                 
                 scan_pos += 1
-        elif texture['flag'] & BM_FLAG_RLE:
+        else:
             size_int = texture_blob.read(4)
             raw_data.write(size_int)
                         
             texture_total_size = int.from_bytes(size_int, byteorder="little")
             texture['line_sizes'] = []
             
+            line_size_byte_width = 2 if use_big_rle else 1
+            
+            expected_data_size = texture_total_size - (texture['ysize'] * line_size_byte_width) - 4
+            
             for line in range(texture['ysize']):
-                line_size_int = texture_blob.read(1)
+                line_size_int = texture_blob.read(line_size_byte_width)
+                                
                 raw_data.write(line_size_int)
                 
-                texture['line_sizes'].append(int.from_bytes(line_size_int, byteorder="little"))
+                line_size = int.from_bytes(line_size_int, byteorder="little")
+                                
+                texture['line_sizes'].append(line_size)
             
             data_size = sum(texture['line_sizes'])
-                        
-            if data_size != (texture_total_size - texture['ysize'] - 4):
-                raise ValueError(f"Issue with {texture['texture_name']}: summed data size is {data_size} while parsed header indicates {texture_total_size - texture['ysize'] - 4}")
+            
+            if data_size != expected_data_size:
+                raise ValueError(f"Issue with {texture['texture_name']}: summed data size is {data_size} while parsed header indicates {expected_data_size}")
             
             for line_size in texture['line_sizes']:
                 raw_bytes = texture_blob.read(line_size)
@@ -300,11 +308,7 @@ if output_textures:
                         converted_data.extend([idx_r, idx_g, idx_b, idx_a])
                         
                         scan_pos += 1
-            
-        elif texture['flag'] & BM_FLAG_RLE_BIG:
-            raise ValueError(f"Data for texture {texture['texture_name']} is compressed with BM_FLAG_RLE_BIG set, which is not supported at the moment")
-            
-        
+                        
         if output_raw:
             of = open('./output/' + texture['texture_name'] + "_" + str(texture['frame']) + ".bin", 'wb')
             of.write(raw_data.getvalue())
@@ -617,7 +621,7 @@ if output_font:
             image = Image.frombytes("RGBA", (texW, fnt['ft_h']), bytes(png_data))
             image.save('./converted/fonts/' + row['file_name'] + '.png', format="png")
             
-if output_sounds:
+if output_sounds and num_sounds > 0:
     sounds_blob = io.BytesIO(sound_data_stream)
     
     for sound in sounds:
