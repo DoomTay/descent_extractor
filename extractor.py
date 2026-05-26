@@ -18,6 +18,9 @@ output_surfaces = True
 output_font = True
 output_maps = False
 
+# Set this to True if DESCENT.PIG contains Mac format textures, so that palette indices in texture exports are swapped, among a few other Mac format-specific accommodations
+export_mac_textures = False
+
 BM_FLAG_TRANSPARENT = 1
 BM_FLAG_SUPER_TRANSPARENT = 2
 BM_FLAG_NO_LIGHTING = 4
@@ -241,15 +244,28 @@ if output_textures:
         is_compressed = bool(texture['flag'] & (BM_FLAG_RLE | BM_FLAG_RLE_BIG))
         use_big_rle = bool(texture['flag'] & BM_FLAG_RLE_BIG)
         
+        if export_mac_textures:
+            if texture['texture_name'] == 'cockpit' or texture['texture_name'] == 'rearview':
+                texture['xsize'] = 640
+                texture['ysize'] = 480
+                use_big_rle = True
+            
+            if texture['texture_name'] == 'status':
+                texture['xsize'] = 640
+        
         if not is_compressed:
             for i in range(texture['xsize'] * texture['ysize']):
                 current_byte = texture_blob.read(1)
                 current_byte_int = int.from_bytes(current_byte, byteorder="little")
                 
-                idx_r,idx_g,idx_b,idx_a = get_palette_color(current_byte_int)
-                
                 raw_data.write(current_byte)
                 
+                if export_mac_textures == True:
+                    if current_byte_int == 0: current_byte_int = 255
+                    elif current_byte_int == 255: current_byte_int = 0
+                
+                idx_r,idx_g,idx_b,idx_a = get_palette_color(current_byte_int)
+                                
                 converted_data.extend([idx_r,idx_g,idx_b,idx_a])
                 
                 scan_pos += 1
@@ -297,12 +313,20 @@ if output_textures:
                             byte = raw_bytes[i]
                             i += 1
                             
+                            if export_mac_textures == True:
+                                if byte == 0: byte = 255
+                                elif byte == 255: byte = 0
+                            
                             idx_r,idx_g,idx_b,idx_a = get_palette_color(byte)
                             
                             converted_data.extend([idx_r, idx_g, idx_b, idx_a] * repeat)
                             
                             scan_pos += repeat
                     else:
+                        if export_mac_textures == True:
+                            if control_byte == 0: control_byte = 255
+                            elif control_byte == 255: control_byte = 0
+                                
                         idx_r,idx_g,idx_b,idx_a = get_palette_color(control_byte)
                         
                         converted_data.extend([idx_r, idx_g, idx_b, idx_a])
