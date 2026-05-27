@@ -220,6 +220,10 @@ if output_sounds or output_textures:
         file_offset += len(texture_data_stream)
 
 def get_palette_color(idx):
+    if export_mac_textures == True:
+        if idx == 0: idx = 255
+        elif idx == 255: idx = 0
+
     return (palette[idx * 4 + 0], palette[idx * 4 + 1], palette[idx * 4 + 2], palette[idx * 4 + 3])
 
 if output_textures:    
@@ -259,10 +263,6 @@ if output_textures:
                 current_byte_int = int.from_bytes(current_byte, byteorder="little")
                 
                 raw_data.write(current_byte)
-                
-                if export_mac_textures == True:
-                    if current_byte_int == 0: current_byte_int = 255
-                    elif current_byte_int == 255: current_byte_int = 0
                 
                 idx_r,idx_g,idx_b,idx_a = get_palette_color(current_byte_int)
                                 
@@ -313,20 +313,12 @@ if output_textures:
                             byte = raw_bytes[i]
                             i += 1
                             
-                            if export_mac_textures == True:
-                                if byte == 0: byte = 255
-                                elif byte == 255: byte = 0
-                            
                             idx_r,idx_g,idx_b,idx_a = get_palette_color(byte)
                             
                             converted_data.extend([idx_r, idx_g, idx_b, idx_a] * repeat)
                             
                             scan_pos += repeat
                     else:
-                        if export_mac_textures == True:
-                            if control_byte == 0: control_byte = 255
-                            elif control_byte == 255: control_byte = 0
-                                
                         idx_r,idx_g,idx_b,idx_a = get_palette_color(control_byte)
                         
                         converted_data.extend([idx_r, idx_g, idx_b, idx_a])
